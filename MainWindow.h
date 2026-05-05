@@ -2,12 +2,12 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include "ui_MainWindow.h"      // 包含生成的 UI 类定义
+#include "ui_MainWindow.h"
 #include "AStarSolver.h"
 #include <array>
 
 QT_BEGIN_NAMESPACE
-namespace Ui { class EightPuzzleSolverClass; }   // 匹配实际生成的类名
+namespace Ui { class EightPuzzleSolverClass; }
 QT_END_NAMESPACE
 
 class MainWindow : public QMainWindow
@@ -26,18 +26,19 @@ private slots:
     void updateOpenTableDisplay();
     void updateClosedTableDisplay();
     void onBtnBenchmark();
+    void onSetTarget();
 
 private:
-    Ui::EightPuzzleSolverClass* ui;   // 修改指针类型
+    Ui::EightPuzzleSolverClass* ui;
     AStarSolver* solver;
-    std::array<int, 9> currentState;
-    std::array<int, 9> goalState;
+    std::array<int, 9> currentState;   // Current board
+    std::array<int, 9> targetState;    // User-defined goal
 
     void updateBoardDisplay();
     void setState(const std::array<int, 9>& state);
-    bool isSolvable(const std::array<int, 9>& state);
-    std::array<int, 9> generateRandomSolvableState(int steps = 200);
+    std::array<int, 9> generateRandomSolvableStateFromTarget(int steps = 200);
     void displayStatistics();
+    bool parseTargetString(const QString& text, std::array<int, 9>& outState);
 };
 
 #endif // MAINWINDOW_H

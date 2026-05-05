@@ -1,60 +1,72 @@
-#pragma execution_character_set("utf-8")
 #include "MainWindow.h"
+#include "KnowledgeBase.h"
 #include <QMessageBox>
 #include <QFile>
 #include <QTextStream>
 #include <random>
 #include <QThread>
 #include <QApplication>
+#include <QLineEdit>
+#include <QLabel>
+#include <QPushButton>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
-    , ui(new Ui::EightPuzzleSolverClass)   // 修改此处
+    , ui(new Ui::EightPuzzleSolverClass)
     , solver(nullptr)
 {
     ui->setupUi(this);
 
-    // 主窗口大小
-    this->resize(650, 700);
+    // Default target state: ordered 1..8 with blank at end
+    targetState = { 1,2,3,4,5,6,7,8,0 };
 
-    // 棋盘区域 (假设左边缘 20, 顶边缘 40)
-    // 控制按钮区域
-   
-    ui->btnRandomInit->setGeometry(320, 80, 110, 35);
-    ui->btnSolve->setGeometry(440, 80, 70, 35);
-    ui->btnReset->setGeometry(520, 80, 70, 35);
+    // Create target input controls (if not already in .ui)
+    QLabel* labelTarget = new QLabel("Target:", this);
+    QLineEdit* lineTarget = new QLineEdit(this);
+    lineTarget->setObjectName("lineTarget");
+    lineTarget->setPlaceholderText("9 digits 0-8 no repeat");
+    lineTarget->setText("123456780");
+    QPushButton* btnSetTarget = new QPushButton("Set", this);
+    btnSetTarget->setObjectName("btnSetTarget");
 
+    // Position them (adjust coordinates as needed)
+    labelTarget->setGeometry(500, 340, 50, 25);
+    lineTarget->setGeometry(550, 340, 120, 25);
+    btnSetTarget->setGeometry(680, 340, 60, 25);
 
-    // 底部统计标签
-    ui->labelExpanded->setGeometry(30, 540, 140, 25);
-    ui->labelGenerated->setGeometry(180, 540, 160, 25);   // 宽度加大
-    ui->labelTime->setGeometry(360, 540, 120, 25);
-    ui->btnBenchmark->setGeometry(520, 540, 100, 30);
+    connect(btnSetTarget, &QPushButton::clicked, this, &MainWindow::onSetTarget);
 
-    // 设置文字
-    ui->btnRandomInit->setText("随机初始化");
-    ui->btnSolve->setText("求解");
-    ui->btnReset->setText("重置");
-    ui->labelExpanded->setText("扩展节点数: 0");
-    ui->labelGenerated->setText("生成节点总数: 0");
-    ui->labelTime->setText("执行时间: 0 ms");
-    if (ui->btnBenchmark) ui->btnBenchmark->setText("性能对比");
+    // Set button texts
+    ui->btnRandomInit->setText("Random");
+    ui->btnSolve->setText("Solve");
+    ui->btnReset->setText("Reset");
+    if (ui->btnBenchmark) ui->btnBenchmark->setText("Benchmark");
 
-    goalState = { 1,2,3,4,5,6,7,8,0 };
-    currentState = goalState;
-    updateBoardDisplay();
+    // Statistics labels
+    ui->labelExpanded->setText("Expanded: 0");
+    ui->labelGenerated->setText("Generated: 0");
+    ui->labelTime->setText("Time: 0 ms");
+    ui->labelExpanded->setMinimumWidth(90);
+    ui->labelGenerated->setMinimumWidth(90);
+    ui->labelTime->setMinimumWidth(80);
 
+    // Solver
     solver = new AStarSolver(this);
     connect(solver, &AStarSolver::openTableChanged, this, &MainWindow::updateOpenTableDisplay);
     connect(solver, &AStarSolver::closedTableChanged, this, &MainWindow::updateClosedTableDisplay);
 
-    // 按钮连接
+    // Button connections
     connect(ui->btnRandomInit, &QPushButton::clicked, this, &MainWindow::onBtnRandomInit);
     connect(ui->btnSolve, &QPushButton::clicked, this, &MainWindow::onBtnSolve);
     connect(ui->btnReset, &QPushButton::clicked, this, &MainWindow::onBtnReset);
-       if (ui->btnBenchmark) {
+    connect(ui->comboHeuristic, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onHeuristicChanged);
+    if (ui->btnBenchmark) {
         connect(ui->btnBenchmark, &QPushButton::clicked, this, &MainWindow::onBtnBenchmark);
     }
+
+    // Initial board = target
+    currentState = targetState;
+    updateBoardDisplay();
 }
 
 MainWindow::~MainWindow()
@@ -81,25 +93,14 @@ void MainWindow::setState(const std::array<int, 9>& state)
     QApplication::processEvents();
 }
 
-bool MainWindow::isSolvable(const std::array<int, 9>& state)
+std::array<int, 9> MainWindow::generateRandomSolvableStateFromTarget(int steps)
 {
-    int inv = 0;
-    for (int i = 0; i < 9; ++i) {
-        if (state[i] == 0) continue;
-        for (int j = i + 1; j < 9; ++j) {
-            if (state[j] != 0 && state[i] > state[j]) inv++;
-        }
-    }
-    return (inv % 2 == 0);
-}
-
-std::array<int, 9> MainWindow::generateRandomSolvableState(int steps)
-{
-    std::array<int, 9> state = goalState;
+    std::array<int, 9> state = targetState;
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dir(0, 3);
-    int zeroPos = 8;
+    int zeroPos = -1;
+    for (int i = 0; i < 9; ++i) if (state[i] == 0) { zeroPos = i; break; }
     for (int s = 0; s < steps; ++s) {
         int row = zeroPos / 3, col = zeroPos % 3;
         int d = dir(gen);
@@ -121,19 +122,19 @@ std::array<int, 9> MainWindow::generateRandomSolvableState(int steps)
 
 void MainWindow::onBtnRandomInit()
 {
-    currentState = generateRandomSolvableState(200);
+    currentState = generateRandomSolvableStateFromTarget(200);
     updateBoardDisplay();
 }
 
 void MainWindow::onBtnReset()
 {
-    currentState = goalState;
+    currentState = targetState;
     updateBoardDisplay();
     ui->textOpen->clear();
     ui->textClosed->clear();
-    ui->labelExpanded->setText("扩展节点数: 0");
-    ui->labelGenerated->setText("生成节点数: 0");
-    ui->labelTime->setText("执行时间: 0 ms");
+    ui->labelExpanded->setText("Expanded: 0");
+    ui->labelGenerated->setText("Generated: 0");
+    ui->labelTime->setText("Time: 0 ms");
 }
 
 void MainWindow::onHeuristicChanged(int index)
@@ -146,25 +147,20 @@ void MainWindow::updateOpenTableDisplay()
     auto lines = solver->getOpenTableStrings();
     ui->textOpen->clear();
     for (const QString& line : lines) ui->textOpen->append(line);
-    ui->textOpen->append(QString("当前OPEN表节点数: %1")
-        .arg(solver->getGeneratedCount() - solver->getExpandedCount()));
+    ui->textOpen->append(QString("Open size: %1").arg(solver->getGeneratedCount() - solver->getExpandedCount()));
 }
 
 void MainWindow::updateClosedTableDisplay()
 {
-   
-       auto openLines = solver->getOpenTableStrings();
-       auto closedLines = solver->getClosedTableStrings();
-       ui->textClosed->clear();
-       ui->textClosed->append("========== OPEN 表 ==========");
-       for (const auto& line : openLines) ui->textClosed->append(line);
-        ui->textClosed->append("========== CLOSED 表 ==========");
-       for (const auto& line : closedLines) ui->textClosed->append(line);
+    auto lines = solver->getClosedTableStrings();
+    ui->textClosed->clear();
+    for (const QString& line : lines) ui->textClosed->append(line);
 }
+
 void MainWindow::onBtnSolve()
 {
-    if (!isSolvable(currentState)) {
-        QMessageBox::warning(this, "不可解", "当前状态无解，请重新随机初始化。");
+    if (!KnowledgeBase::isSolvable(currentState, targetState)) {
+        QMessageBox::warning(this, "Unsolvable", "Start state cannot reach target state.");
         return;
     }
 
@@ -172,7 +168,7 @@ void MainWindow::onBtnSolve()
     ui->textOpen->clear();
     ui->textClosed->clear();
 
-    bool success = solver->solve(currentState, goalState);
+    bool success = solver->solve(currentState, targetState);
 
     if (success) {
         auto path = solver->getSolutionPath();
@@ -180,10 +176,10 @@ void MainWindow::onBtnSolve()
             setState(s);
             QThread::msleep(150);
         }
-        QMessageBox::information(this, "完成", "已找到解路径！");
+        QMessageBox::information(this, "Done", "Solution found!");
     }
     else {
-        QMessageBox::information(this, "无解", "算法未能找到解");
+        QMessageBox::information(this, "Failed", "No solution found.");
     }
 
     displayStatistics();
@@ -192,35 +188,35 @@ void MainWindow::onBtnSolve()
 
 void MainWindow::displayStatistics()
 {
-    ui->labelExpanded->setText(QString("扩展节点数: %1").arg(solver->getExpandedCount()));
-    ui->labelGenerated->setText(QString("生成节点总数: %1").arg(solver->getGeneratedCount()));
-    ui->labelTime->setText(QString("执行时间: %1 ms").arg(solver->getElapsedTimeMs()));
+    ui->labelExpanded->setText(QString("Expanded: %1").arg(solver->getExpandedCount()));
+    ui->labelGenerated->setText(QString("Generated: %1").arg(solver->getGeneratedCount()));
+    ui->labelTime->setText(QString("Time: %1 ms").arg(solver->getElapsedTimeMs()));
 }
 
 void MainWindow::onBtnBenchmark()
 {
     auto testState = currentState;
-    if (!isSolvable(testState)) {
-        QMessageBox::warning(this, "错误", "当前状态不可解，无法进行性能对比。");
+    if (!KnowledgeBase::isSolvable(testState, targetState)) {
+        QMessageBox::warning(this, "Error", "Current state unsolvable for benchmark.");
         return;
     }
 
     QString report;
-    report += "启发式函数,扩展节点数,生成节点总数,耗时(ms)\n";
+    report += "Heuristic,Expanded,Generated,Time(ms)\n";
 
     for (int h = 0; h < 3; ++h) {
         solver->setHeuristicType(h);
-        bool ok = solver->solve(testState, goalState);
+        bool ok = solver->solve(testState, targetState);
         if (ok) {
             report += QString("%1,%2,%3,%4\n")
-                .arg(h == 0 ? "曼哈顿距离" : h == 1 ? "错位数" : "欧几里得距离")
+                .arg(h == 0 ? "Manhattan" : h == 1 ? "Misplaced" : "Euclidean")
                 .arg(solver->getExpandedCount())
                 .arg(solver->getGeneratedCount())
                 .arg(solver->getElapsedTimeMs());
         }
         else {
-            report += QString("%1,无解,无解,无解\n")
-                .arg(h == 0 ? "曼哈顿距离" : h == 1 ? "错位数" : "欧几里得距离");
+            report += QString("%1,unsolvable,unsolvable,unsolvable\n")
+                .arg(h == 0 ? "Manhattan" : h == 1 ? "Misplaced" : "Euclidean");
         }
     }
 
@@ -230,9 +226,44 @@ void MainWindow::onBtnBenchmark()
         QTextStream out(&file);
         out << report;
         file.close();
-        QMessageBox::information(this, "完成", QString("性能对比数据已保存到 %1").arg(fileName));
+        QMessageBox::information(this, "Done", QString("Benchmark saved to %1").arg(fileName));
     }
     else {
-        QMessageBox::warning(this, "错误", "无法保存文件，请检查目录权限。");
+        QMessageBox::warning(this, "Error", "Cannot save file.");
     }
+}
+
+bool MainWindow::parseTargetString(const QString& text, std::array<int, 9>& outState)
+{
+    if (text.length() != 9) return false;
+    QSet<int> seen;
+    for (int i = 0; i < 9; ++i) {
+        bool ok;
+        int val = text.mid(i, 1).toInt(&ok);
+        if (!ok || val < 0 || val > 8 || seen.contains(val)) return false;
+        outState[i] = val;
+        seen.insert(val);
+    }
+    return true;
+}
+
+void MainWindow::onSetTarget()
+{
+    QLineEdit* lineTarget = findChild<QLineEdit*>("lineTarget");
+    if (!lineTarget) return;
+    QString text = lineTarget->text().trimmed();
+    std::array<int, 9> newTarget;
+    if (!parseTargetString(text, newTarget)) {
+        QMessageBox::warning(this, "Invalid", "Must be 9 digits 0-8 without repetition.");
+        return;
+    }
+    targetState = newTarget;
+    QMessageBox::information(this, "Success", "Target updated.");
+    currentState = targetState;
+    updateBoardDisplay();
+    ui->textOpen->clear();
+    ui->textClosed->clear();
+    ui->labelExpanded->setText("Expanded: 0");
+    ui->labelGenerated->setText("Generated: 0");
+    ui->labelTime->setText("Time: 0 ms");
 }

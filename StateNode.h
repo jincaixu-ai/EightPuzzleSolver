@@ -1,24 +1,29 @@
-#pragma once
+#ifndef STATENODE_H
+#define STATENODE_H
+
 #include <array>
 #include <QString>
 
+// Node structure representing a state in the 8-puzzle
 struct StateNode {
-    std::array<int, 9> state;   // 一维数组表示3x3棋盘，0表示空格
-    int g;                      // 实际代价
-    int h;                      // 启发式估计
+    std::array<int, 9> state;   // 1D array representing the 3x3 board, 0 for empty
+    int g;                      // actual cost from start to this state
+    int h;                      // heuristic estimate to goal
     int f;                      // g + h
-    int zeroPos;                // 空格索引 (0~8)
-    StateNode* parent;          // 父节点指针
-    QString move;               // 从父节点到本节点的移动方向
+    int zeroPos;                // index of empty cell (0~8)
+    StateNode* parent;          // pointer to parent node (for path reconstruction)
+    QString move;               // move direction from parent to this node
 
     StateNode();
     StateNode(const std::array<int, 9>& s, int gVal, int hVal, StateNode* par = nullptr, int zPos = -1);
     bool operator==(const StateNode& other) const;
 };
 
-// 哈希函数，用于 unordered_set
+// Hash function for StateNode to be used in unordered_set
 namespace std {
     template<> struct hash<StateNode> {
         size_t operator()(const StateNode& node) const;
     };
 }
+
+#endif // STATENODE_H

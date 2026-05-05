@@ -1,15 +1,16 @@
-#pragma once
-#include "StateNode.h"
+#ifndef ASTARSOLVER_H
+#define ASTARSOLVER_H
+
 #include <QObject>
 #include <QElapsedTimer>
 #include <unordered_set>
 #include <queue>
 #include <vector>
-#include <QVector>
+#include "StateNode.h"
 
 struct CompareNode {
     bool operator()(const StateNode* a, const StateNode* b) {
-        return a->f > b->f;  // 最小堆
+        return a->f > b->f;  // min-heap based on f
     }
 };
 
@@ -19,24 +20,24 @@ public:
     explicit AStarSolver(QObject* parent = nullptr);
     ~AStarSolver();
 
-    void setHeuristicType(int type); // 0:曼哈顿, 1:错位数, 2:欧几里得
+    void setHeuristicType(int type); // 0: Manhattan, 1: Misplaced, 2: Euclidean
+
+    // Core A* algorithm
     bool solve(const std::array<int, 9>& start, const std::array<int, 9>& goal);
+
+    // Statistics
     int getExpandedCount() const { return expandedCount; }
     int getGeneratedCount() const { return generatedCount; }
     qint64 getElapsedTimeMs() const { return elapsedTime; }
+
+    // For displaying OPEN/CLOSED tables (simplified, can be extended)
     QVector<QString> getOpenTableStrings() const;
     QVector<QString> getClosedTableStrings() const;
     QVector<std::array<int, 9>> getSolutionPath() const;
 
-public slots:
-    // 在后台线程中调用：使用 Qt 支持的类型（QVector<int>）作为参数，避免元对象问题
-    void startSolve(const QVector<int>& startVec, const QVector<int>& goalVec);
-
 signals:
     void openTableChanged();
     void closedTableChanged();
-    // 新：后台求解完成后的信号，包含是否成功、路径以及统计数据
-    void solveFinished(bool success, QVector<QVector<int>> path, int expandedCount, int generatedCount, qint64 elapsedTime);
 
 private:
     int heuristicType;
@@ -46,12 +47,17 @@ private:
     int generatedCount;
     qint64 elapsedTime;
 
+    // Open list (priority queue by f)
     std::priority_queue<StateNode*, std::vector<StateNode*>, CompareNode> openList;
+    // Closed set (hash set of expanded states)
     std::unordered_set<StateNode> closedSet;
-    std::vector<StateNode*> allNodes; // 所有动态分配的节点，用于析构释放
+    // All dynamically allocated nodes (for cleanup)
+    std::vector<StateNode*> allNodes;
 
     int computeHeuristic(const std::array<int, 9>& state);
-    std::vector<StateNode*> expandNode(StateNode* node);
     bool isGoal(const std::array<int, 9>& state);
     void clear();
+    void reconstructPath(StateNode* node);
 };
+
+#endif // ASTARSOLVER_H
